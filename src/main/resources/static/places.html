@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Места</title></head>
+<body>
+<h2>Места</h2>
+
+<p>
+    <input id="name" placeholder="название">
+    <button id="addBtn">добавить</button>
+</p>
+<ul id="list"></ul>
+
+<script src="app.js"></script>
+<script>
+    nav('places.html');
+    const list = document.getElementById('list');
+    const nameInput = document.getElementById('name');
+    document.getElementById('addBtn').onclick = add;
+
+    async function load() {
+        list.innerHTML = '';
+        let items;
+        try { items = await api('/api/places'); }
+        catch (e) { list.textContent = 'Ошибка: ' + e.message; return; }
+
+        if (items.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'пусто';
+            list.appendChild(li);
+            return;
+        }
+        for (const p of items) {
+            const li = document.createElement('li');
+            li.textContent = '#' + p.id + ' ' + p.name + ' ';
+
+            const edit = document.createElement('button');
+            edit.textContent = 'изм.';
+            edit.onclick = () => rename(p.id, p.name);
+            li.appendChild(edit);
+            li.appendChild(document.createTextNode(' '));
+
+            const del = document.createElement('button');
+            del.textContent = 'удал.';
+            del.onclick = () => remove(p.id);
+            li.appendChild(del);
+
+            list.appendChild(li);
+        }
+    }
+
+    async function add() {
+        const name = nameInput.value.trim();
+        if (!name) { alert('введи название'); return; }
+        try {
+            await api('/api/places', 'POST', { name });
+            nameInput.value = '';
+            load();
+        } catch (e) { alert(e.message); }
+    }
+
+    async function rename(id, old) {
+        const name = prompt('Новое название:', old);
+        if (name === null) return;
+        const trimmed = name.trim();
+        if (!trimmed) { alert('пустое имя'); return; }
+        try {
+            await api('/api/places/' + id, 'PUT', { name: trimmed });
+            load();
+        } catch (e) { alert(e.message); }
+    }
+
+    async function remove(id) {
+        if (!confirm('Удалить место #' + id + '?')) return;
+        try {
+            await api('/api/places/' + id, 'DELETE');
+            load();
+        } catch (e) { alert(e.message); }
+    }
+
+    load();
+</script>
+</body>
+</html>

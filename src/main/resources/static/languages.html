@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Языки</title></head>
+<body>
+<h2>Языки</h2>
+
+<p>
+    <input id="name" placeholder="название (English)">
+    <input id="code" placeholder="код (en)">
+    <button id="addBtn">добавить</button>
+</p>
+<ul id="list"></ul>
+
+<script src="app.js"></script>
+<script>
+    nav('languages.html');
+    const list = document.getElementById('list');
+    const nameInput = document.getElementById('name');
+    const codeInput = document.getElementById('code');
+    document.getElementById('addBtn').onclick = add;
+
+    async function load() {
+        list.innerHTML = '';
+        let items;
+        try { items = await api('/api/languages'); }
+        catch (e) { list.textContent = 'Ошибка: ' + e.message; return; }
+
+        if (items.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'пусто';
+            list.appendChild(li);
+            return;
+        }
+        for (const l of items) {
+            const li = document.createElement('li');
+            li.textContent = '#' + l.id + ' ' + l.name + ' [' + l.code + '] ';
+
+            const edit = document.createElement('button');
+            edit.textContent = 'изм.';
+            edit.onclick = () => rename(l.id, l.name, l.code);
+            li.appendChild(edit);
+            li.appendChild(document.createTextNode(' '));
+
+            const del = document.createElement('button');
+            del.textContent = 'удал.';
+            del.onclick = () => remove(l.id);
+            li.appendChild(del);
+
+            list.appendChild(li);
+        }
+    }
+
+    async function add() {
+        const name = nameInput.value.trim();
+        const code = codeInput.value.trim();
+        if (!name || !code) { alert('введи название и код'); return; }
+        try {
+            await api('/api/languages', 'POST', { name, code });
+            nameInput.value = '';
+            codeInput.value = '';
+            load();
+        } catch (e) { alert(e.message); }
+    }
+
+    async function rename(id, oldName, oldCode) {
+        const name = prompt('Название:', oldName);
+        if (name === null) return;
+        const code = prompt('Код:', oldCode);
+        if (code === null) return;
+        if (!name.trim() || !code.trim()) { alert('пустые значения'); return; }
+        try {
+            await api('/api/languages/' + id, 'PUT', { name: name.trim(), code: code.trim() });
+            load();
+        } catch (e) { alert(e.message); }
+    }
+
+    async function remove(id) {
+        if (!confirm('Удалить язык #' + id + '?')) return;
+        try {
+            await api('/api/languages/' + id, 'DELETE');
+            load();
+        } catch (e) { alert(e.message); }
+    }
+
+    load();
+</script>
+</body>
+</html>

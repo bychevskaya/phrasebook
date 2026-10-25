@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Фраза</title>
+</head>
+<body>
+<h2 id="title">Добавить фразу</h2>
+
+<p>Тематика: <select id="topic"></select></p>
+<p>Место (необязательно): <select id="place"></select></p>
+<p>Фраза: <input id="text" size="60" placeholder="например: Здравствуйте!"></p>
+
+<h3>Переводы</h3>
+<div id="translations"></div>
+<p><button id="addTranslationBtn">+ добавить перевод</button></p>
+
+<p><button id="saveBtn">сохранить</button></p>
+
+<script src="app.js"></script>
+<script>
+    nav('add-phrase.html');
+
+    const id = new URLSearchParams(location.search).get('id');
+
+    const topicSelect = document.getElementById('topic');
+    const placeSelect = document.getElementById('place');
+    const textInput = document.getElementById('text');
+    const translationsDiv = document.getElementById('translations');
+
+    let allLanguages = [];
+
+    document.getElementById('saveBtn').onclick = save;
+    document.getElementById('addTranslationBtn').onclick = () => addTranslationRow(null, '');
+
+    function addTranslationRow(languageId, text) {
+        const row = document.createElement('div');
+        row.style.marginBottom = '4px';
+
+        const sel = document.createElement('select');
+        for (const l of allLanguages) {
+            const opt = document.createElement('option');
+            opt.value = l.id;
+            opt.textContent = l.name + ' (' + l.code + ')';
+            if (languageId != null && Number(languageId) === Number(l.id)) opt.selected = true;
+            sel.appendChild(opt);
+        }
+
+        const inp = document.createElement('input');
+        inp.value = text || '';
+        inp.placeholder = 'перевод';
+        inp.size = 50;
+        inp.style.marginLeft = '6px';
+
+        const del = document.createElement('button');
+        del.textContent = '×';
+        del.style.marginLeft = '6px';
+        del.onclick = () => row.remove();
+
+        row.appendChild(sel);
+        row.appendChild(inp);
+        row.appendChild(del);
+        translationsDiv.appendChild(row);
+    }
+
+    function collectTranslations() {
+        const result = [];
+        const seen = new Set();
+        for (const row of translationsDiv.children) {
+            const languageId = Number(row.querySelector('select').value);
+            const text = row.querySelector('input').value.trim();
+            if (!text) continue;
+            if (seen.has(languageId)) {
+                throw new Error('Один язык добавлен дважды в переводах');
+            }
+            seen.add(languageId);
+            result.push({ languageId, text });
+        }
+        return result;
+    }
+
+    async function init() {
+        if (id) {
+            document.getElementById('title').textContent = 'Изменить фразу #' + id;
+        }
+
+        try {
+            const [topics, places, languages] = await Promise.all([
+                api('/api/topics'), api('/api/places'), api('/api/languages')
+            ]);
+            allLanguages = languages;
+
+            for (const t of topics) {
+                const o = document.createElement('option');
+                o.value = t.id; o.textContent = t.name;
+                topicSelect.appendChild(o);
+            }
+
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.textContent = '— не указано —';
+            placeSelect.appendChild(emptyOpt);
+            for (const p of places) {
+                const o = document.createElement('option');
+                o.value = p.id; o.textContent = p.name;
+                placeSelect.appendChild(o);
+            }
+
+            if (allLanguages.length === 0) {
+                alert('Сначала добавьте хотя бы один язык на странице «Языки».');
+            }
+        } catch (e) {
+            alert('Ошибка загрузки справочников: ' + e.message);
+            return;
+        }
+
+        if (id) {
+            try {
+                const p = await api('/api/phrases/' + id);
+                textInput.value = p.text;
+                topicSelect.value = p.topic ? p.topic.id : '';
+                placeSelect.value = p.place ? p.place.id : '';
+                for (const t of p.translations) {
+                    addTranslationRow(t.language.id, t.text);
+                }
+            } catch (e) {
+                alert('Ошибка загрузки фразы: ' + e.message);
+            }
+        } else if (allLanguages.length > 0) {
+            addTranslationRow(allLanguages[0].id, '');
+        }
+    }
+
+    async function save() {
+        const text = textInput.value.trim();
+        const topicId = Number(topicSelect.value);
+        const placeId = placeSelect.value ? Number(placeSelect.value) : null;
+
+        if (!text) { alert('введите текст фразы'); return; }
+        if (!topicId) { alert('выберите тематику'); return; }
+
+        let translations;
+        try {
+            translations = collectTranslations();
+        } catch (e) {
+            alert(e.message);
+            return;
+        }
+
+        const body = { text, topicId, placeId, translations };
+
+        try {
+            if (id) {
+                await api('/api/phrases/' + id, 'PUT', body);
+            } else {
+                await api('/api/phrases', 'POST', body);
+            }
+            location.href = 'index.html';
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>

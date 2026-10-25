@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Фразы</title>
+</head>
+<body>
+<h2>Фразы</h2>
+
+<p>
+    Тематика: <select id="topicFilter"><option value="">все</option></select>
+    &nbsp;
+    Место: <select id="placeFilter"><option value="">все</option></select>
+    &nbsp;
+    Поиск: <input id="q" placeholder="слово в тексте или переводе">
+    <button id="searchBtn">найти</button>
+    <button id="clearBtn">сброс</button>
+</p>
+
+<ul id="list"></ul>
+
+<script src="app.js"></script>
+<script>
+    nav('index.html');
+
+    const topicFilter = document.getElementById('topicFilter');
+    const placeFilter = document.getElementById('placeFilter');
+    const qInput = document.getElementById('q');
+    const list = document.getElementById('list');
+
+    document.getElementById('searchBtn').onclick = loadPhrases;
+    document.getElementById('clearBtn').onclick = () => {
+        topicFilter.value = '';
+        placeFilter.value = '';
+        qInput.value = '';
+        loadPhrases();
+    };
+    topicFilter.onchange = loadPhrases;
+    placeFilter.onchange = loadPhrases;
+
+    async function loadDictionaries() {
+        try {
+            const [topics, places] = await Promise.all([api('/api/topics'), api('/api/places')]);
+            for (const t of topics) {
+                const o = document.createElement('option');
+                o.value = t.id; o.textContent = t.name;
+                topicFilter.appendChild(o);
+            }
+            for (const p of places) {
+                const o = document.createElement('option');
+                o.value = p.id; o.textContent = p.name;
+                placeFilter.appendChild(o);
+            }
+        } catch (e) {
+            alert('Ошибка загрузки справочников: ' + e.message);
+        }
+    }
+
+    async function loadPhrases() {
+        list.innerHTML = '';
+        const params = new URLSearchParams();
+        if (topicFilter.value) params.set('topicId', topicFilter.value);
+        if (placeFilter.value) params.set('placeId', placeFilter.value);
+        if (qInput.value.trim()) params.set('q', qInput.value.trim());
+
+        let phrases;
+        try {
+            phrases = await api('/api/phrases?' + params.toString());
+        } catch (e) {
+            list.textContent = 'Ошибка: ' + e.message;
+            return;
+        }
+
+        if (phrases.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'пусто';
+            list.appendChild(li);
+            return;
+        }
+
+        for (const p of phrases) {
+            const li = document.createElement('li');
+            li.style.marginBottom = '12px';
+
+            const topic = p.topic ? p.topic.name : '—';
+            const place = p.place ? p.place.name : '—';
+
+            li.innerHTML = '<b>#' + p.id + ' «' + escapeHtml(p.text) + '»</b>'
+                + ' — тематика: ' + escapeHtml(topic)
+                + ', место: ' + escapeHtml(place)
+                + ' <a href="add-phrase.html?id=' + p.id + '">изм.</a> ';
+
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'удал.';
+            delBtn.onclick = () => deletePhrase(p.id);
+            li.appendChild(delBtn);
+
+            if (p.translations && p.translations.length > 0) {
+                const ul = document.createElement('ul');
+                for (const t of p.translations) {
+                    const tli = document.createElement('li');
+                    tli.textContent = t.language.name + ' (' + t.language.code + '): ' + t.text;
+                    ul.appendChild(tli);
+                }
+                li.appendChild(ul);
+            } else {
+                const empty = document.createElement('div');
+                empty.style.color = '#888';
+                empty.textContent = 'переводов пока нет';
+                li.appendChild(empty);
+            }
+
+            list.appendChild(li);
+        }
+    }
+
+    async function deletePhrase(id) {
+        if (!confirm('Удалить фразу #' + id + '?')) return;
+        try {
+            await api('/api/phrases/' + id, 'DELETE');
+            loadPhrases();
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s)
+            .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    }
+
+    loadDictionaries().then(loadPhrases);
+</script>
+</body>
+</html>
